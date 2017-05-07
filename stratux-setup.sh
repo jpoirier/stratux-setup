@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright (c) 2016 Joseph D Poirier
 # Distributable under the terms of The New BSD License
 # that can be found in the LICENSE file.
@@ -24,7 +25,6 @@ if [ $(whoami) != 'root' ]; then
     echo "${BOLD}${RED}This script must be executed as root, exiting...${WHITE}${NORMAL}"
     exit
 fi
-
 
 SCRIPTDIR="`pwd`"
 
@@ -131,40 +131,23 @@ echo "${GREEN}...done${WHITE}"
 echo
 echo "${YELLOW}**** Installing dependencies... *****${WHITE}"
 
+echo "deb http://ftp.debian.org/debian jessie-backports main" > /etc/apt/sources.list.d/jessie-backports.list
+apt-get update
+
 if [ "$REVISION" == "$RPI2BxREV" ] || [ "$REVISION" == "$RPI2ByREV" ]  || [ "$REVISION" == "$RPI3BxREV" ] || [ "$REVISION" == "$RPI3ByREV" ] || [ "$REVISION" == "$RPI0xREV" ] || [ "$REVISION" == "$RPI0yREV" ]; then
     apt-get install -y rpi-update
     rpi-update
 fi
 
-apt-get update
 apt-mark hold plymouth
 apt-get dist-upgrade -y
-apt-get upgrade -y
-apt-get install -y git
-git config --global http.sslVerify false
-apt-get install -y iw
-apt-get install -y lshw
-apt-get install -y wget
-apt-get install -y isc-dhcp-server
-apt-get install -y tcpdump
-apt-get install -y cmake
-apt-get install -y libusb-1.0-0.dev
-apt-get install -y build-essential
-apt-get install -y mercurial
-apt-get install -y autoconf
-apt-get install -y fftw3
-apt-get install -y fftw3-dev
-apt-get install -y libtool
-apt-get install -y automake
 apt-get remove -y hostapd
-apt-get install -y hostapd
-apt-get install -y pkg-config
-apt-get install -y libjpeg-dev i2c-tools python-smbus python-pip python-dev python-pil python-daemon screen
+apt-get install -y git iw lshw wget isc-dhcp-server tcpdump cmake libusb-1.0-0.dev build-essential mercurial autoconf fftw3 fftw3-dev libtool automake hostapd pkg-config libjpeg-dev i2c-tools python-smbus python-pip python-dev python-pil python-daemon screen
+apt-get install -t jessie-backports -y --force-yes golang-1.7
+apt-get autoremove
 pip install wiringpi
-#apt-get purge golang*
-
+git config --global http.sslVerify false
 echo "${GREEN}...done${WHITE}"
-
 
 ##############################################################
 ##  Hardware check
@@ -258,7 +241,6 @@ if ! grep -q "blacklist dvb_usb_rtl2832u" "/etc/modprobe.d/rtl-sdr-blacklist.con
     echo blacklist dvb_usb_rtl2832u >>/etc/modprobe.d/rtl-sdr-blacklist.conf
 fi
 
-
 ##############################################################
 ##  Go environment setup
 ##############################################################
@@ -266,99 +248,37 @@ echo
 echo "${YELLOW}**** Go environment setup... *****${WHITE}"
 
 # if any of the following environment variables are set in .bashrc delete them
-if grep -q "export GOROOT_BOOTSTRAP=" "/root/.bashrc"; then
-    line=$(grep -n 'GOROOT_BOOTSTRAP=' /root/.bashrc | awk -F':' '{print $1}')d
-    sed -i $line /root/.bashrc
+if grep -q "export GOPATH=" "$HOME/.bashrc"; then
+    line=$(grep -n 'GOPATH=' $HOME/.bashrc | awk -F':' '{print $1}')d
+    sed -i $line $HOME/.bashrc
 fi
 
-if grep -q "export GOPATH=" "/root/.bashrc"; then
-    line=$(grep -n 'GOPATH=' /root/.bashrc | awk -F':' '{print $1}')d
-    sed -i $line /root/.bashrc
+if grep -q "export GOROOT=" "$HOME/.bashrc"; then
+    line=$(grep -n 'GOROOT=' $HOME/.bashrc | awk -F':' '{print $1}')d
+    sed -i $line $HOME/.bashrc
 fi
 
-if grep -q "export GOROOT=" "/root/.bashrc"; then
-    line=$(grep -n 'GOROOT=' /root/.bashrc | awk -F':' '{print $1}')d
-    sed -i $line /root/.bashrc
-fi
-
-if grep -q "export PATH=" "/root/.bashrc"; then
-    line=$(grep -n 'PATH=' /root/.bashrc | awk -F':' '{print $1}')d
-    sed -i $line /root/.bashrc
+if grep -q "export PATH=" "$HOME/.bashrc"; then
+    line=$(grep -n 'PATH=' $HOME/.bashrc | awk -F':' '{print $1}')d
+    sed -i $line $HOME/.bashrc
 fi
 
 # only add new paths
 XPATH="\$PATH"
-if [[ ! "$PATH" =~ "/root/go/bin" ]]; then
-    XPATH+=:/root/go/bin
+if [[ ! "$PATH" =~ "/usr/lib/go-1.7/bin" ]]; then
+    XPATH+=:/usr/lib/go-1.7/bin
 fi
 
-if [[ ! "$PATH" =~ "/root/go_path/bin" ]]; then
-    XPATH+=:/root/go_path/bin
-fi
+echo export GOROOT=/usr/lib/go-1.7 >> $HOME/.bashrc
+echo export GOPATH=$HOME/go-path >> $HOME/.bashrc
+echo export PATH=${XPATH} >> $HOME/.bashrc
 
-echo export GOROOT_BOOTSTRAP=/root/gobootstrap >>/root/.bashrc
-echo export GOPATH=/root/go_path >>/root/.bashrc
-echo export GOROOT=/root/go >>/root/.bashrc
-echo export PATH=${XPATH} >>/root/.bashrc
-
-export GOROOT_BOOTSTRAP=/root/gobootstrap
-export GOPATH=/root/go_path
-export GOROOT=/root/go
-export PATH=${PATH}:/root/go/bin:/root/go_path/bin
-
-source /root/.bashrc
+source $HOME/.bashrc
 
 echo "${GREEN}...done${WHITE}"
 
-
-##############################################################
-##  Go bootstrap compiler installation
-##############################################################
-echo
-echo "${YELLOW}**** Go bootstrap compiler installtion... *****${WHITE}"
-
-cd /root
-
-rm -rf go/
-rm -rf gobootstrap/
-
-if [ "$MACHINE" == "$ARM6L" ] || [ "$MACHINE" == "$ARM7L" ]; then
-    #### For RPi-2/3, is there any disadvantage to using the armv6l compiler?
-    wget https://storage.googleapis.com/golang/go1.7.2.linux-armv6l.tar.gz --no-check-certificate
-    tar -zxvf go1.7.2.linux-armv6l.tar.gz
-
-    if [ ! -d /root/go ]; then
-        echo "${BOLD}${RED}ERROR - go folder doesn't exist, exiting...${WHITE}${NORMAL}"
-        exit
-    fi
-
-#    if [ "$MACHINE" == "$ARM6L" ]; then
-#        export GOARM=6
-#    else
-#        export GOARM=7
-#    then
-elif [ "$MACHINE" == "$ARM64" ]; then
-    # ulimit -s 1024     # set the thread stack limit to 1mb
-    # ulimit -s          # check that it worked
-    # env GO_TEST_TIMEOUT_SCALE=10 GOROOT_BOOTSTRAP=/root/gobootstrap
-
-    wget https://github.com/jpoirier/GoAarch64Binaries/raw/master/go1.6.linux-armvAarch64.tar.gz --no-check-certificate
-    tar -zxvf go1.6.linux-armvAarch64.tar.gz
-    if [ ! -d /root/go ]; then
-        echo "${BOLD}${RED}ERROR - go folder doesn't exist, exiting...${WHITE}${NORMAL}"
-        exit
-    fi
-else
-    echo
-    echo "${BOLD}${RED}ERROR - unsupported machine type: $MACHINE, exiting...${WHITE}${NORMAL}"
-fi
-
-rm -f go1.*.linux*
-rm -rf /root/go_path
-mkdir -p /root/go_path
-
-echo "${GREEN}...done${WHITE}"
-
+rm -rf $GOPATH
+mkdir -p $GOPATH
 
 ##############################################################
 ##  RTL-SDR tools build
@@ -366,7 +286,7 @@ echo "${GREEN}...done${WHITE}"
 echo
 echo "${YELLOW}**** RTL-SDR library build... *****${WHITE}"
 
-cd /root
+cd $HOME
 
 rm -rf librtlsdr
 git clone https://github.com/jpoirier/librtlsdr
@@ -387,7 +307,7 @@ echo "${GREEN}...done${WHITE}"
 echo
 echo "${YELLOW}**** Stratux build and installation... *****${WHITE}"
 
-cd /root
+cd $HOME
 
 rm -rf stratux
 git clone https://github.com/cyoung/stratux --recursive
@@ -420,7 +340,7 @@ echo "${GREEN}...done${WHITE}"
 echo
 echo "${YELLOW}**** Kalibrate build and installation... *****${WHITE}"
 
-cd /root
+cd $HOME
 
 rm -rf kalibrate-rtl
 git clone https://github.com/steve-m/kalibrate-rtl
@@ -431,7 +351,6 @@ make
 make install
 
 echo "${GREEN}...done${WHITE}"
-
 
 ##############################################################
 ##  System tweaks
@@ -456,43 +375,40 @@ fi
 
 echo "${GREEN}...done${WHITE}"
 
-
 #################################################
-## Setup /root/.stxAliases
+## Setup $HOME/.stxAliases
 #################################################
 echo
-echo "${YELLOW}**** Setup /root/.stxAliases *****${WHITE}"
+echo "${YELLOW}**** Setup $HOME/.stxAliases *****${WHITE}"
 
-if [ -f "/root/stratux/image/stxAliases.txt" ]; then
-    cp /root/stratux/image/stxAliases.txt /root/.stxAliases
+if [ -f "$HOME/stratux/image/stxAliases.txt" ]; then
+    cp $HOME/stratux/image/stxAliases.txt $HOME/.stxAliases
 else
-    cp ${SCRIPTDIR}/files/stxAliases.txt /root/.stxAliases
+    cp ${SCRIPTDIR}/files/stxAliases.txt $HOME/.stxAliases
 fi
 
-if [ ! -f "/root/.stxAliases" ]; then
-    echo "${BOLD}${RED}ERROR - /root/.stxAliases file missing, exiting...${WHITE}${NORMAL}"
+if [ ! -f "$HOME/.stxAliases" ]; then
+    echo "${BOLD}${RED}ERROR - $HOME/.stxAliases file missing, exiting...${WHITE}${NORMAL}"
     exit
 fi
 
 echo "${GREEN}...done${WHITE}"
 
-
 #################################################
-## Add .stxAliases command to /root/.bashrc
+## Add .stxAliases command to $HOME/.bashrc
 #################################################
 echo
-echo "${YELLOW}**** Add .stxAliases command to /root/.bashrc *****${WHITE}"
+echo "${YELLOW}**** Add .stxAliases command to $HOME/.bashrc *****${WHITE}"
 
-if ! grep -q ".stxAliases" "/root/.bashrc"; then
-cat <<EOT >> /root/.bashrc
-if [ -f /root/.stxAliases ]; then
-. /root/.stxAliases
+if ! grep -q ".stxAliases" "$HOME/.bashrc"; then
+cat <<EOT >> $HOME/.bashrc
+if [ -f $HOME/.stxAliases ]; then
+. $HOME/.stxAliases
 fi
 EOT
 fi
 
 echo "${GREEN}...done${WHITE}"
-
 
 ##############################################################
 ##  WiFi Access Point setup
@@ -501,7 +417,6 @@ echo
 echo "${YELLOW}**** WiFi Access Point setup... *****${WHITE}"
 
 . ${SCRIPTDIR}/wifi-ap.sh
-
 
 ##############################################################
 ## Copying motd file
@@ -524,7 +439,6 @@ echo "${GREEN}...done${WHITE}"
 
 #echo "${GREEN}...done${WHITE}"
 
-
 ##############################################################
 ## Copying fancontrol.py file
 ##############################################################
@@ -536,7 +450,6 @@ cp ${SCRIPTDIR}/files/fancontrol.py /usr/bin/fancontrol.py
 
 echo "${GREEN}...done${WHITE}"
 
-
 ##############################################################
 ## Copying the hostapd_manager.sh utility
 ##############################################################
@@ -547,7 +460,6 @@ chmod 755 ${SCRIPTDIR}/files/hostapd_manager.sh
 cp ${SCRIPTDIR}/files/hostapd_manager.sh /usr/bin/hostapd_manager.sh
 
 echo "${GREEN}...done${WHITE}"
-
 
 ##############################################################
 ## Disable ntpd autostart
@@ -561,13 +473,12 @@ fi
 
 echo "${GREEN}...done${WHITE}"
 
-
 ##############################################################
 ## Epilogue
 ##############################################################
 echo
 echo
-echo "${MAGENTA}**** Setup complete, don't forget to reboot! *****${WHITE}"
+echo "${MAGENTA}**** Setup complete, don\'t forget to reboot! *****${WHITE}"
 echo
 
 echo ${NORMAL}
